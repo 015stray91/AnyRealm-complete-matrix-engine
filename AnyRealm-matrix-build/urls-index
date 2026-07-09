@@ -1,0 +1,79 @@
+# ===================================================================
+#      REFLECTIONOS MASTER SYSTEM REGISTRY COMPILATION PLATFORM
+#        CORE ARCHITECTURE TRACKING REPOSITORIES MAP GRID
+# ===================================================================
+# BUILD VERSION : ReflectionOS12-5.10+kali-6.1.18arm64
+# CHIPSET CODENAME : Motorola Genevn (Qualcomm Snapdragon Parrot)
+# OPERATOR INITIALS : stray91 / slm015 (Sick Like Me - Old O)
+# ===================================================================
+
+[SECTION_01_UPSTREAM_CORE_MIRRORS]
+# Target description: Official upstream Debian/Kali compiled binary pools and kernel backport codebases.
+# Purpose: Bridges the 5.10 kernel storage architecture seamlessly toward 6.6 and 6.8 system specifications.
+kali_download_pool = kali-6.1.18_arm64 https://kali.download/kali/pool/main/l/
+clo_upstream =
+https://git.codelinaro.org/clo/la/kernel/msm-5.10.git
+
+[SECTION_02_CROSS_COMPILATION_TOOLCHAINS]
+# Target description: Statically targeted cross-compilers, LLVM optimization systems, and GNU linkers.
+# Purpose: Compiles high-performance machine code blocks optimized directly for the 64-bit ARM CPU layout.
+dlt_toolchain           = https://github.com/015stray91/toolchain-arm.git
+cpu_llvm_toolchain      = https://github.com/015stray91/cpullvm-toolchain.git
+clang_master            = https://github.com/015stray91/clang.git
+clang_ndk_12            = https://github.com/015stray91/clang-12-ndk.git
+
+[SECTION_03_LOW_LEVEL_KERNEL_TREES]
+# Target description: Core kernel driver repositories, GKI source trees, and Linux Kernel Module (LKM) engines.
+# Purpose: Infuses KernelSU-Next, Enhanced SUSFS path-hiding, and ZeroMount VFS code lines straight into Image.gz.
+kernel_source           = https://github.com/015stray91/kernel-msm-1.git
+superbuilders           = https://github.com/015stray91/Super-Builders.git
+msm_common_moto_510     = https://github.com/015stray91/android_kernel_motorola_msm-5.10.git
+moto_msm_google_gki     = https://github.com/015stray91/android_kernel_google_msm.git
+lkm_modules_setup       = https://github.com/015stray91/Modules-setup.git
+
+[SECTION_04_HARDWARE_STANDALONE_TOOLS]
+# Target description: Statically compiled native ARM64 image manipulation and block-level compression utilities.
+# Purpose: Unpacks, parses, and re-seals system EROFS blocks (-C 4096) and LZ4 vendor boot ramdisks on-device.
+asopmkbootimg           = https://github.com/015stray91/Asop-img-tool.git
+asop_partition_tool     = https://github.com/015stray91/aosp15_partition_tools.git
+erofs_utils             = https://github.com/015stray91/erofs-utils.git
+lineage_extract_utils   = https://github.com/015stray91/Lineage_android_tools_extract-utils.git
+
+[SECTION_05_USER_SPACE_SYSTEM_LAYERS]
+# Target description: Declarative operating system image recipes, desktop UI interfaces, and baseband configurations.
+# Purpose: Drops Google background tracking completely, hardwires baseband filters, and builds the KDE Plasma layer.
+debos                   = https://github.com/015stray91/debos-realm.git
+nethunter_pro           = https://github.com/015stray91/kali-nethunter-pro-genevn.git
+kde_plasma              = https://github.com/015stray91/Kde-plasma-mobile.git
+lineage_modem           = https://github.com/015stray91/android_packages_apps_CarrierConfig.git
+eud                     = https://github.com/015stray91/eud-gene-fromvn.git
+custom_recovery         = https://github.com/015stray91/yume--gstylus5g23.git
+
+[SECTION_06_PRIVILEGED_TWIN_APIS]
+# Target description: High-privileged Binder IPC socket interfaces, framework hook extensions, and bridge applets.
+# Purpose: Connects Tasker and Termux dynamically to Big Sister Sui's root-level system-server AIDL tokens.
+xposed_bridge           = https://github.com/015stray91/XposedBridge-api.git
+shizukuapi              = https://github.com/015stray91/Shizuku-API.git
+tasker_api              = https://github.com/015stray91/TaskerPlugin-api.git
+termux_api              = https://github.com/015stray91/termux-api-bridge-endpoints.git
+
+# ===================================================================
+# END OF REFLECTIONOS REGISTER MAP - DATA HOUSES ALLIGNED AND SEALED
+# ===================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+kotoamatsukami-core/module 
+https://github.com/015stray91/KOTOAMATSUKAMI-CORE.git
+

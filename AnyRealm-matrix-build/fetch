@@ -1,0 +1,26 @@
+#!/bin/bash
+# ===================================================================
+# ANYREALM: RECOVERY BINARY STAGING CORE (FIXED PATH PASS)
+# OPERATOR: stray91 / slm015 | TARGET ARCH: STANDALONE NATIVE ARM64
+# ===================================================================
+
+WORKSPACE_TOOLS="/data/local/tmp/anyrealm_swap_factory/tools"
+mkdir -p "$WORKSPACE_TOOLS" && cd "$WORKSPACE_TOOLS"
+
+echo "=========================================================="
+echo "[*] Ingesting standalone static ARM64 AOSP extraction and compilation binaries..."
+echo "=========================================================="
+
+# 1. Fetch official, static native ARM64 binaries (No Python/No script wrappers)
+# These direct paths pull pre-compiled C/C++ native executables built for on-device terminal use
+wget -q "https://github.com/015stray91/Asop-img-tool.git" -O unpackbootimg
+wget -q "https://github.com/015stray91/Asop-img-tool.git" -O mkbootimg
+wget -q "https://github.com/015stray91/Asop-img-tool.git" -O lz4
+
+# 2. Force rigid hardware execution permission flags across the native binaries
+chmod 755 unpackbootimg mkbootimg lz4
+
+echo "=========================================================="
+echo "[+] SUCCESS: STANDALONE ARM64 AOSP TOOLS STAGED NATIVELY!"
+echo "=========================================================="
+ls -lh unpackbootimg mkbootimg lz4

@@ -1,0 +1,159 @@
+```c
+/* SPDX-License-Identifier: GPL-2.0 */
+/**
+ * @file hybrid_mount.h
+ * @brief Hybrid Mount subsystem header for KernelSU Next
+ *
+ * Combines Zero Mount, Hybrid Mount, and SUSFS logics
+ * for overlay filesystem management and rootless
+ * module injection in the Android kernel.
+ */
+
+#ifndef _HYBRID_MOUNT_H_
+#define _HYBRID_MOUNT_H_
+
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
+#include <linux/namespace.h>
+#include <linux/path.h>
+#include <linux/dcache.h>
+#include <linux/slab.h>
+#include <linux/list.h>
+#include <linux/spinlock.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/namei.h>
+#include <linux/overlayfs.h>
+#include <linux/version.h>
+
+/**
+ * @defgroup version_info Version & Identification
+ * @{
+ */
+/** @brief Version string for the hybrid mount subsystem */
+#define HMRID_MOUNT_VERSION   "2.1.0"
+/** @brief Module name identifier */
+#define HMRID_MOUNT_NAME      "hybrid_mount"
+/** @brief Human-readable description of the module */
+#define HMRID_MOUNT_DESC      "Hybrid Mount — Zero Mount + SUSFS unified"
+/** @} */
+
+/**
+ * @defgroup config_limits Configuration Limits
+ * @{
+ */
+/** @brief Maximum number of modules that can be tracked */
+#define HM_MAX_MODULES        64
+/** @brief Maximum overlay directories per mount entry */
+#define HM_MAX_OVERLAY_DIRS   8
+/** @brief Maximum tracked mount points */
+#define HM_MAX_MOUNT_POINTS   32
+/** @brief Maximum path string length */
+#define HM_MAX_PATH_LEN       256
+/** @} */
+
+/**
+ * @defgroup proc_entries Proc Filesystem Entries
+ * @{
+ */
+/** @brief Proc directory name under /proc */
+#define HM_PROC_DIR           "hybrid_mount"
+/** @brief Status file in proc directory */
+#define HM_PROC_STATUS        "status"
+/** @brief Modules list file in proc directory */
+#define HM_PROC_MODULES       "modules"
+/** @brief Mount points list file in proc directory */
+#define HM_PROC_MOUNTS        "mounts"
+/** @} */
+
+/**
+ * @defgroup mount_flags Mount Type Flags
+ * @{
+ */
+/** @brief Zero mount mode (stealth/hidden mounting) */
+#define HM_FLAG_ZERO_MOUNT     BIT(0)
+/** @brief Hybrid mount mode (dual overlay configuration) */
+#define HM_FLAG_HYBRID_MOUNT   BIT(1)
+/** @brief SUSFS integration mode */
+#define HM_FLAG_SUSFS_MOUNT    BIT(2)
+/** @brief Legacy magic mount compatibility mode */
+#define HM_FLAG_MAGIC_MOUNT    BIT(6)
+/** @} */
+
+/**
+ * @defgroup behavior_flags Mount Behavior Flags
+ * @{
+ */
+/** @brief Hide mount from /proc/mounts and similar listings */
+#define HM_FLAG_HIDE_MOUNT     BIT(3)
+/** @brief Use bind mount instead of overlayfs */
+#define HM_FLAG_BIND_MOUNT     BIT(4)
+/** @brief Module-specific mount operation */
+#define HM_FLAG_MODULE_MOUNT   BIT(5)
+/** @brief Force mount even if target is busy */
+#define HM_FLAG_FORCE_MOUNT    BIT(7)
+/** @} */
+
+/**
+ * @defgroup return_codes Return Codes
+ * @{
+ */
+/** @brief Operation completed successfully */
+#define HM_SUCCESS              0
+/** @brief Invalid argument provided */
+#define HM_ERR_INVALID_ARG     (-1)
+/** @brief Memory allocation failed */
+#define HM_ERR_NO_MEMORY       (-2)
+/** @brief Mount operation failed */
+#define HM_ERR_MOUNT_FAILED    (-3)
+/** @brief Target is already mounted */
+#define HM_ERR_ALREADY_MOUNTED (-4)
+/** @brief Required resource not found */
+#define HM_ERR_NOT_FOUND       (-5)
+/** @brief Insufficient permissions */
+#define HM_ERR_PERMISSION      (-6)
+/** @brief Resource is busy or locked */
+#define HM_ERR_BUSY            (-7)
+/** @brief Module limit reached */
+#define HM_ERR_MODULE_FULL     (-8)
+/** @brief Generic/uncategorized error */
+#define HM_ERR_GENERIC         (-99)
+/** @} */
+
+/**
+ * @defgroup data_structures Data Structures
+ * @{
+ */
+
+/**
+ * @brief Single overlay layer configuration for overlayfs
+ *
+ * Represents the directory structure needed for one overlay mount,
+ * including read-only lower, writable upper, work, and merged directories.
+ */
+struct hm_overlay_layer {
+    char lower_path[HM_MAX_PATH_LEN];   /** @brief Read-only lower directory */
+    char upper_path[HM_MAX_PATH_LEN];   /** @brief Writable upper directory */
+    char work_path[HM_MAX_PATH_LEN];    /** @brief OverlayFS work directory */
+    char merged_path[HM_MAX_PATH_LEN];  /** @brief Where overlay is mounted */
+    bool active;                         /** @brief Layer activation state */
+    bool visible;                        /** @brief Visibility in /proc/mounts */
+};
+
+/**
+ * @brief Individual mount entry tracking one overlay mount
+ *
+ * Tracks a single mount operation with its configuration, state,
+ * and relationship to modules and the mount list.
+ */
+struct hm_mount_entry {
+    struct list_head    list;            /** @brief Linked list node for global mount list */
+    u32                 id;              /** @brief Unique mount identifier */
+    u32                 flags;           /** @brief HM_FLAG_* combination bitmask */
+    char                mount_point[HM_MAX_PATH_LEN]; /** @brief Target mount point path */
+    char                module_name[HM_MAX_PATH_LEN]; /** @brief Owning module name */
+    struct hm_overlay_layer layer;       /** @brief Overlay configuration for this mount */
+    struct vfsmount    *vfsmnt;          /** @brief VFS mount reference (NULL if not mounted) */
+    bool                is_mounted;      /** @brief

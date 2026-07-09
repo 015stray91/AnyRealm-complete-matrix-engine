@@ -1,0 +1,81 @@
+# ===================================================================
+# ANYREALM FACTORY: UPSTREAM CLO KERNEL & MODULAR RAMDISK BUILDER
+# WORKFLOW CORRELATION: ReflectionOS12-5.10+kali-6.1.18arm64
+# TARGET INTERFACE: DIRECT REPOSITORY PATH TRACKING (/patches & /packages)
+# ===================================================================
+
+      - name: Clone Motorola 5.10 Kernel Source Tree
+        run: |
+          git clone --depth=1 https://github.com kernel-msm-1
+
+      - name: Apply Local Staged Patches
+        run: |
+          cd kernel-msm-1
+          chmod +x scripts/kconfig/apply-kernel-patches.sh
+          
+          echo "[*] Injection Matrix: Processing local patch array from repository tracking..."
+          # Direct-targets your internal patches folder (50, 51, 60, 65, 70) without web scraping
+          ./scripts/kconfig/apply-kernel-patches.sh . . patches/
+
+      - name: Base Configuration Ingestion
+        run: |
+          cd kernel-msm-1
+          mkdir -p out
+          # Instructs the Kconfig parser to read your deduplicated master config baseline
+          make O=out ARCH=arm64 ksu-nethunter.defconfig
+
+      - name: Master Debug Configuration Fusion
+        run: |
+          cd kernel-msm-1
+          # Merges your explicit Moto Debug Target configurations directly into the out build directory last
+          ./scripts/kconfig/merge_config.sh -O out -m out/.config \
+            arch/arm64/configs/vendor/ext_config/debug-moto-parrot-genevn.config \
+            arch/arm64/configs/vendor/ext_config/moto-parrot-genevn.config \
+            arch/arm64/configs/vendor/ext_config/debug-parrot.config \
+            arch/arm64/configs/vendor/ext_config/moto-parrot.config
+
+      - name: Compile Fused Hardware Core & Hybrid FUSE Module
+        run: |
+          cd kernel-msm-1
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE="aarch64-linux-gnu-"
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC="clang-12"
+          export LD="ld.lld-12"
+          
+          # 1. Compile primary Image.gz kernel file binary
+          make O=out ARCH=arm64 CC=clang-12 LD=ld.lld-12 CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 Image.gz -j$(nproc)
+          
+          # 2. Compile your standalone 5-Patch Hybrid FUSE kernel module binary
+          echo "[*] Compiling your hybrid hidden object FUSE module separately..."
+          make O=out ARCH=arm64 CC=clang-12 LD=ld.lld-12 CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 M=fs/fuse modules
+
+      - name: Package Boot & Vendor Boot Image Architecture
+        run: |
+          cd kernel-msm-1/packages
+          chmod +x *.sh
+          
+          echo "[*] Running local package scripts to assemble boot.img layers..."
+          ./build_boot_image.sh ../out/arch/arm64/boot/Image.gz
+          
+          echo "[*] Running local package scripts to assemble vendor_boot.img layers via native LZ4..."
+          # Calls your local ramdisk assembly scripts directly next to your tool variables
+          ./build_vendor_boot_image.sh ../out/fs/fuse/anyrealm_fuse.ko
+          
+          # Move your freshly packed image assets straight up to the workspace root
+          cp -f ../out/boot.img ../../ReflectionOS-Boot-Genevn.img
+          cp -f ../out/vendor_boot.img ../../ReflectionOS-VendorBoot-Genevn.img
+          cp -f ../out/fs/fuse/anyrealm_fuse.ko ../../anyrealm_fuse.ko
+
+      - name: Upload Verified ReflectionOS Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReflectionOS-Modular-Flashing-Images
+          path: |
+            ReflectionOS-Boot-Genevn.img
+            ReflectionOS-VendorBoot-Genevn.img
+            anyrealm_fuse.ko
+          compression-level: 9
+          overwrite: true

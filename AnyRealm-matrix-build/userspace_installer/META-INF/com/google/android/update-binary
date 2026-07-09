@@ -1,0 +1,3 @@
+#!/bin/sbin/sh
+# Dummy update-binary for Magisk/KSU module compatibility handoff
+exit 0

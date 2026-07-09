@@ -1,0 +1,5 @@
+# Kotoamatsukami Core - Vendor Ramdisk Root Tree UI Adjustments
+ro.vendor.perf.cluster.boost=1
+ro.surface_flinger.set_idle_timer_ms=4000
+ro.config.low_ram=false
+persist.sys.scrolling.friction=0.005

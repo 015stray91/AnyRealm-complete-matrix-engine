@@ -1,0 +1,6 @@
+id=kotoamatsukami_core
+name=Kotoamatsukami Core Engine
+version=v1.0.0
+versionCode=100
+author=YourName
+description=Unified storage architecture fusing Zero Mount, Hybrid Mount, and SUFS into a single VFS pipeline. Automatically misdirects root-sensitive application queries.

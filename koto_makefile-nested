@@ -1,0 +1,17 @@
+# ===================================================================
+# STANDALONE MODULE BUILDER: ANYREALM HYBRID FUSE MODULE
+# OPERATOR: stray91 / slm015 | TARGET ARCH: ARM64 (LEGACY GKI 5.10)
+# ===================================================================
+
+obj-m += anyrealm_fuse.o
+
+# Point this variable straight to your local kernel source tree workspace path
+KDIR ?= /data/local/tmp/anyrealm_swap_factory/sources/kernel-msm-1
+CONFIG_ZEROMOUNT_ADBD=y
+CONFIG_KSU_SUSFS=y
+
+all:
+	make -C $(KDIR) M=$(PWD) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules
+
+clean:
+	make -C $(KDIR) M=$(PWD) clean
