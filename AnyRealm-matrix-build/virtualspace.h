@@ -120,4 +120,32 @@
 #define HM_SYNC_LEVEL_1         1   /* Basic sync (watch only) */
 #define HM_SYNC_LEVEL_2         2   /* Full sync (KDE Connect + kio-fuse) */
 #define HM_SYNC_LEVEL_3         3   /* Advanced sync (multi-device, streaming) */
-#define HM_SYNC_LEVEL_4         4  
+
+#define HM_SYNC_LEVEL_4         4  #define HM_SYNC_LEVEL_4         4   /* Real-time continuous atomic sync matrix */
+
+/*========== Timing & Intervals ==========*/
+#define HM_CLEANUP_INTERVAL_MS  300000  /* 5 Minute periodic garbage collection sweep */
+
+/* ================================================================
+ *  API Function Prototypes for Core Subsystem
+ * ================================================================ */
+
+/* System Lifecycle Controls */
+static int __init hybrid_mount_init(void);
+static void __exit hybrid_mount_exit(void);
+
+/* Mount & Module Control Registrars */
+int hm_register_mount(const char *source, const char *target, const char *type, unsigned long flags, int sync_level);
+int hm_unregister_mount(unsigned int id);
+int hm_register_module(const char *name, const char *path, unsigned long flags);
+int hm_unregister_module(const char *name);
+
+/* User-Space Virtualization Hooks (kio-fuse) */
+int hm_kio_fuse_attach(unsigned int instance_id, const char *url, const char *mount_point);
+int hm_kio_fuse_detach(unsigned int instance_id);
+
+/* Remote Device Sync Vectors (KDE Connect) */
+int hm_kde_device_update(unsigned int device_id, const char *name, const char *address, int sync_level, bool paired, bool online);
+int hm_network_mount_connect(const char *protocol, const char *host, const char *remote_path, const char *local_path);
+
+#endif /* _HYBRID_MOUNT_H_ */
