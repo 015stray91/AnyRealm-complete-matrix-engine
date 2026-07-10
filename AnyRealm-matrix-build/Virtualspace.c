@@ -208,4 +208,232 @@ static struct timer_list hm_cleanup_timer;
  * ================================================================ */
 
 /**
- * hm_find_mount_locked - Find a
+ * hm_find_mount_locked - Find a/**
+ * hm_find_mount_locked - Find a mount point by its ID (requires hm_rwsem held)
+ * @id: Mount identifier to look up
+ */
+static struct hm_mount_point *hm_find_mount_locked(unsigned int id)
+{
+	struct hm_mount_point *mp;
+
+	list_for_each_entry(mp, &hm_mount_list, node) {
+		if (mp->id == id)
+			return mp;
+	}
+	return NULL;
+}
+
+/**
+ * hm_find_module_locked - Find module information by name
+ * @name: Name of the loaded module
+ */
+static struct hm_module_info *hm_find_module_locked(const char *name)
+{
+	struct hm_module_info *mod;
+
+	list_for_each_entry(mod, &hm_module_list, node) {
+		if (strcmp(mod->name, name) == 0)
+			return mod;
+	}
+	return NULL;
+}
+
+/* ================================================================
+ *  Procfs Status & Seq_File Engine
+ * ================================================================ */
+
+static int hm_status_show(struct seq_file *m, void *v)
+{
+	struct hm_mount_point *mp;
+	struct hm_module_info *mod;
+	struct hm_kde_device *kde;
+
+	seq_printf(m, "========================================================\n");
+	seq_printf(m, " Hybrid Mount Framework Status V%s\n", HM_VERSION);
+	seq_printf(m, "========================================================\n\n");
+
+	down_read(&hm_rwsem);
+	
+	seq_printf(m, "[Active Subsystem Mounts] - Count: %d\n", atomic_read(&hm_mount_count));
+	list_for_each_entry(mp, &hm_mount_list, node) {
+		seq_printf(m, " ID: %u | Type: %s | Active: %s | Sync Level: %d\n",
+			   mp->id, mp->type, mp->active ? "YES" : "NO", mp->sync_level);
+		seq_printf(m, "   Src: %s\n", mp->source);
+		seq_printf(m, "   Tgt: %s\n\n", mp->target);
+	}
+
+	seq_printf(m, "[Tracked Modules] - Count: %d\n", atomic_read(&hm_module_count));
+	list_for_each_entry(mod, &hm_module_list, node) {
+		seq_printf(m, "  Module: %s | Mounted: %s | Path: %s\n",
+			   mod->name, mod->mounted ? "YES" : "NO", mod->path);
+	}
+	seq_printf(m, "\n");
+
+	spin_lock(&hm_spinlock);
+	seq_printf(m, "[KDE Connected Targets]\n");
+	list_for_each_entry(kde, &hm_kde_device_list, node) {
+		seq_printf(m, "  Dev ID: %u | Name: %s | Address: %s | Online: %s\n",
+			   kde->device_id, kde->name, kde->address, kde->online ? "YES" : "NO");
+	}
+	spin_unlock(&hm_spinlock);
+
+	up_read(&hm_rwsem);
+	return 0;
+}
+
+static int hm_status_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hm_status_show, NULL);
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+static const struct proc_ops hm_status_proc_ops = {
+	.proc_open    = hm_status_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+};
+#else
+static const struct file_operations hm_status_proc_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hm_status_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+#endif
+
+/* ================================================================
+ *  Deferred Mount Executor and Workqueue Logic
+ * ================================================================ */
+
+static void hm_deferred_mount_worker(struct work_struct *work)
+{
+	struct hm_mount_work *m_work = container_of(work, struct hm_mount_work, work);
+	struct hm_mount_point *mp;
+
+	pr_info("hybrid_mount: Executing deferred mount task for ID %u\n", m_work->mount_id);
+
+	mutex_lock(&hm_mutex);
+	down_write(&hm_rwsem);
+
+	mp = hm_find_mount_locked(m_work->mount_id);
+	if (mp) {
+		/* Your real overlayfs/VFS virtual mount attachment logic hooks go here */
+		mp->active = true;
+		pr_info("hybrid_mount: Mount ID %u marked active natively\n", mp->id);
+	}
+
+	up_write(&hm_rwsem);
+	mutex_unlock(&hm_mutex);
+
+	kfree(m_work);
+}
+
+static void hm_periodic_cleanup(struct timer_list *t)
+{
+	/* Scheduled non-blocking structural cleanups */
+	schedule_work(&hm_cleanup_work);
+	mod_timer(&hm_cleanup_timer, jiffies + msecs_to_jiffies(HM_CLEANUP_INTERVAL_MS));
+}
+
+static void hm_cleanup_worker(struct work_struct *work)
+{
+	struct hm_mount_point *mp, *tmp;
+
+	mutex_lock(&hm_mutex);
+	down_write(&hm_rwsem);
+
+	/* Sweep old dead structural mappings left by disconnected targets */
+	list_for_each_entry_safe(mp, tmp, &hm_mount_list, node) {
+		if (!mp->active) {
+			pr_info("hybrid_mount: Garbage collection purging stale entry ID %u\n", mp->id);
+			list_del(&mp->node);
+			kfree(mp);
+			atomic_dec(&hm_mount_count);
+		}
+	}
+
+	up_write(&hm_rwsem);
+	mutex_unlock(&hm_mutex);
+}
+
+/* ================================================================
+ *  Subsystem Initialization and Exit
+ * ================================================================ */
+
+static int __init hybrid_mount_init(void)
+{
+	pr_info("hybrid_mount: Initializing Hybrid Mount Core Engine Subsystem\n");
+
+	/* Create the workqueue engine paths */
+	hm_workqueue = create_singlethread_workqueue("khybrid_mountd");
+	if (!hm_workqueue) {
+		pr_err("hybrid_mount: Failed to instantiate core workqueue daemon\n");
+		return -ENOMEM;
+	}
+
+	INIT_WORK(&hm_cleanup_work, hm_cleanup_worker);
+
+	/* Mount the control and reporting status vectors in /proc */
+	hm_proc_dir = proc_mkdir(HM_PROC_DIR, NULL);
+	if (!hm_proc_dir) {
+		pr_err("hybrid_mount: Failed to allocate proc directory interface entry\n");
+		destroy_workqueue(hm_workqueue);
+		return -ENOMEM;
+	}
+
+	proc_create(HM_PROC_STATUS, 0444, hm_proc_dir, &hm_status_proc_ops);
+
+	/* Initialize periodic system sweeping configurations */
+	timer_setup(&hm_cleanup_timer, hm_periodic_cleanup, 0);
+	mod_timer(&hm_cleanup_timer, jiffies + msecs_to_jiffies(HM_CLEANUP_INTERVAL_MS));
+
+	hm_initialized = true;
+	pr_info("hybrid_mount: Core structures deployed cleanly.\n");
+	return 0;
+}
+
+static void __exit hybrid_mount_exit(void)
+{
+	struct hm_mount_point *mp, *tmp_mp;
+	struct hm_module_info *mod, *tmp_mod;
+
+	pr_info("hybrid_mount: Tearing down Hybrid Mount control matrix...\n");
+
+	hm_initialized = false;
+
+	/* Delete tracking timer vectors */
+	del_timer_sync(&hm_cleanup_timer);
+
+	/* Cancel and drain any remaining work queues safely */
+	cancel_work_sync(&hm_cleanup_work);
+	if (hm_workqueue)
+		destroy_workqueue(hm_workqueue);
+
+	/* Clean procfs hooks completely */
+	remove_proc_entry(HM_PROC_STATUS, hm_proc_dir);
+	remove_proc_entry(HM_PROC_DIR, NULL);
+
+	/* Free allocated heap objects */
+	mutex_lock(&hm_mutex);
+	down_write(&hm_rwsem);
+
+	list_for_each_entry_safe(mp, tmp_mp, &hm_mount_list, node) {
+		list_del(&mp->node);
+		kfree(mp);
+	}
+
+	list_for_each_entry_safe(mod, tmp_mod, &hm_module_list, node) {
+		list_del(&mod->node);
+		kfree(mod);
+	}
+
+	up_write(&hm_rwsem);
+	mutex_unlock(&hm_mutex);
+
+	pr_info("hybrid_mount: Subsystem unloaded.\n");
+}
+
+module_init(hybrid_mount_init);
+module_exit(hybrid_mount_exit);
