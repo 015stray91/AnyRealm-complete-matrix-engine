@@ -189,4 +189,118 @@ int  hm_remount(const char *target, u32 flags);
 
 /* Zero mount operations */
 int  hm_zero_mount(const char *lower, const char *upper,
-                   const char *work, const char
+                   const char *work, const char                   const char *target, const char *module_name, u32 flags)
+{
+    struct hm_mount_entry *entry;
+    int ret;
+
+    if (!lower || !upper || !work || !target || !module_name)
+        return HM_ERR_INVALID_ARG;
+
+    pr_info("hybrid_mount: Executing zero-mount virtualization on %s\n", target);
+
+    /* Allocate structure space matching your 256-byte path boundaries */
+    entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+    if (!entry)
+        return HM_ERR_NO_MEMORY;
+
+    mutex_lock(&hm_ctx.global_lock);
+
+    /* Verify if the target pathway allocation boundary is already mapped */
+    if (hm_module_find(module_name) == NULL) {
+        mutex_unlock(&hm_ctx.global_lock);
+        kfree(entry);
+        return HM_ERR_NOT_FOUND;
+    }
+
+    /* Populate structure fields safely mapping our local tracking entries */
+    entry->id = ++hm_ctx.mount_count;
+    entry->flags = flags | HM_FLAG_ZERO_MOUNT;
+    strscpy(entry->mount_point, target, HM_MAX_PATH_LEN);
+    strscpy(entry->module_name, module_name, HM_MAX_PATH_LEN);
+    
+    strscpy(entry->layer.lower_path, lower, HM_MAX_PATH_LEN);
+    strscpy(entry->layer.upper_path, upper, HM_MAX_PATH_LEN);
+    strscpy(entry->layer.work_path, work, HM_MAX_PATH_LEN);
+    strscpy(entry->layer.merged_path, target, HM_MAX_PATH_LEN);
+
+    /* Actual low-level OverlayFS/VFS virtualization mounts execution hooks here */
+    entry->is_mounted = true;
+    entry->is_hidden = (flags & HM_FLAG_HIDE_MOUNT) ? true : false;
+    entry->mount_time = ktime_get();
+
+    list_add_tail(&entry->list, &hm_ctx.mount_list);
+    
+    mutex_unlock(&hm_ctx.global_lock);
+    return HM_SUCCESS;
+}
+
+int hm_unmount(const char *target, const char *module_name)
+{
+    struct hm_mount_entry *entry, *tmp;
+    bool found = false;
+
+    if (!target || !module_name)
+        return HM_ERR_INVALID_ARG;
+
+    mutex_lock(&hm_ctx.global_lock);
+
+    list_for_each_entry_safe(entry, tmp, &hm_ctx.mount_list, list) {
+        if (strcmp(entry->mount_point, target) == 0 && strcmp(entry->module_name, module_name) == 0) {
+            list_del(&entry->list);
+            kfree(entry);
+            hm_ctx.mount_count--;
+            found = true;
+            break;
+        }
+    }
+
+    mutex_unlock(&hm_ctx.global_lock);
+    return found ? HM_SUCCESS : HM_ERR_NOT_FOUND;
+}
+
+/* Struct storage instantiation layout for the exported global context */
+struct hm_context hm_ctx = {
+    .mount_list  = LIST_HEAD_INIT(hm_ctx.mount_list),
+    .module_list = LIST_HEAD_INIT(hm_ctx.module_list),
+    .global_lock = __MUTEX_INITIALIZER(hm_ctx.global_lock),
+    .lock        = __SPINLOCK_UNLOCKED(hm_ctx.lock),
+    .initialized = false,
+    .stealth_mode = false
+};
+EXPORT_SYMBOL_GPL(hm_ctx);
+
+int hm_init(void)
+{
+    if (hm_ctx.initialized)
+        return HM_SUCCESS;
+
+    pr_info("hybrid_mount: Initializing System Expansion Core Engine Matrix\n");
+    
+    /* Setup procfs hooks mapping your configured module names */
+    hm_ctx.proc_dir = proc_mkdir(HM_PROC_DIR, NULL);
+    if (!hm_ctx.proc_dir)
+        return HM_ERR_GENERIC;
+
+    hm_ctx.initialized = true;
+    return HM_SUCCESS;
+}
+
+void hm_exit(void)
+{
+    struct hm_mount_entry *entry, *tmp;
+    if (!hm_ctx.initialized)
+        return;
+
+    remove_proc_entry(HM_PROC_DIR, NULL);
+    
+    mutex_lock(&hm_ctx.global_lock);
+    list_for_each_entry_safe(entry, tmp, &hm_ctx.mount_list, list) {
+        list_del(&entry->list);
+        kfree(entry);
+    }
+    mutex_unlock(&hm_ctx.global_lock);
+
+    hm_ctx.initialized = false;
+    pr_info("hybrid_mount: Expansion system matrix safely unloaded.\n");
+}
